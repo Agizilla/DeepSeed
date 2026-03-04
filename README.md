@@ -33,7 +33,7 @@ with strong local control and low friction.
 
 ## Architecture at a glance
 
-- `Mute Project Dashboard_deepseek_v5.html`: app shell and UI layout.
+- `DeepSeed.html`: app shell and UI layout.
 - `dashboard.css`: UI styling and themes.
 - `dashboard.js`: app state, UI behavior, DeepSeek integration, parser/apply orchestration.
 - `deepseek-parser.js`: reusable parser logic (importable by other viewers).
@@ -50,7 +50,7 @@ Flow:
 ## Quick start
 
 1. Clone the repo.
-2. Open `Mute Project Dashboard_deepseek_v5.html` in a modern browser.
+2. Open `DeepSeed.html` in a modern browser.
 3. Optional: copy `settings.config.example` to `settings.config` and fill values.
 4. Open DeepSeek panel, login with API key, and run `Ask` / `Ask + Parse`.
 

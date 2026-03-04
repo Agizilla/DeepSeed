@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepSeed Viewer - Fixed Export</title>
+        <link rel="stylesheet" href="./dashboard.css">
+
+    <!-- Marked for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Highlight.js for code syntax -->
+    <link id="hljsThemeLink" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <!-- JSZip for creating zip files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- FileSaver for downloading -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Top Navigation -->
+        <div class="top-nav">
+            <div class="project-title">DeepSeed Viewer v2.0</div>
+            <div class="folder-selector">
+                <label for="baseFolder">Base Path:</label>
+                <input type="text" id="baseFolder" class="folder-input" placeholder="/path/to/Mute" value="./Mute">
+                <button class="action-btn" onclick="loadFileTree()">Load</button>
+            </div>
+            <div class="top-actions">
+                <button class="action-btn primary" onclick="showImportModal()">📥 Import Convo</button>
+                <button class="action-btn success" id="saveChangesBtn" onclick="downloadZip()" disabled>💾 Save Changes (ZIP)</button>
+                <button class="action-btn" onclick="runSelfCheck()">Run Self Check</button>
+                <button class="action-btn" id="aiPanelToggleBtn" onclick="toggleAiPanel()">AI</button>
+            </div>
+            <div class="doc-tabs" id="docTabs">
+                <!-- Doc tabs will be populated here -->
+            </div>
+            <div class="top-settings">
+                <button id="settingsBtn" class="toolbox-btn" title="Viewer Settings" onclick="toggleSettingsPanel()">🧰</button>
+            </div>
+        </div>
+
+        <div id="aiPanel" class="ai-panel">
+            <div class="ai-panel-header">
+                <span>DeepSeek Assistant</span>
+                <button class="small-btn" onclick="toggleAiPanel()">Close</button>
+            </div>
+            <div class="ai-connection">
+                <input type="password" id="deepseekApiKeyInput" class="folder-input" placeholder="DeepSeek API key (if settings.config not found)">
+                <button class="small-btn" id="deepseekLoginBtn" onclick="connectDeepseek()">Login</button>
+                <button class="small-btn" onclick="clearDeepseekSession()">Logout</button>
+            </div>
+            <div class="ai-connection ai-config-row">
+                <input type="text" id="deepseekModelInput" class="folder-input" placeholder="Model (default: deepseek-coder)">
+                <input type="text" id="deepseekEndpointInput" class="folder-input" placeholder="Endpoint URL">
+            </div>
+            <div id="aiAuthStatus" class="ai-auth-status">Not connected</div>
+            <textarea id="aiPromptInput" class="ai-prompt" placeholder="Ask DeepSeek for project updates, then click Ask + Parse..."></textarea>
+            <div class="ai-actions">
+                <button class="action-btn" id="aiAskBtn" onclick="askDeepseek(false)">Ask</button>
+                <button class="action-btn primary" id="aiAskParseBtn" onclick="askDeepseek(true)">Ask + Parse</button>
+                <button class="small-btn" onclick="parseLastAiResponse()">Parse Last Response</button>
+            </div>
+            <textarea id="aiResponseOutput" class="ai-response" placeholder="DeepSeek response will appear here (editable)..."></textarea>
+            <div id="snippetTagButtons" class="ai-snippet-actions"></div>
+            <div class="ai-snippet-actions">
+                <input type="text" id="customSnippetKeyword" class="folder-input" placeholder="Custom keyword">
+                <button class="small-btn" onclick="bookmarkSelectedSnippetFromInput()">Add Custom Keyword</button>
+            </div>
+            <div class="ai-snippet-actions">
+                <button class="action-btn" onclick="exportSnippets()">Export Snippets</button>
+                <button class="action-btn success" onclick="downloadSnippets()">Download Snippets</button>
+                <span id="snippetStatus" class="ai-auth-status">Snippets queued: 0</span>
+            </div>
+            <div id="snippetQueueList" class="snippet-queue"></div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left File Tree -->
+            <div class="file-tree">
+                <div class="file-tree-header">
+                    <span>📂 Project Files</span>
+                    <span id="fileCount"></span>
+                </div>
+                <div id="exportSummary" class="export-summary" style="display: none;">
+                    <span>📦 Ready to export:</span> <span id="exportCount">0</span> files
+                </div>
+                <div id="fileTree">
+                    <!-- File tree will be populated here -->
+                    <div style="padding: 1rem; color: #666; text-align: center;">
+                        Enter a base path and click Load
+                    </div>
+                </div>
+            </div>
+
+            <!-- Center File Viewer -->
+            <div class="file-viewer" id="fileViewer">
+                <div style="color: #666; text-align: center; margin-top: 2rem;">
+                    <h2>📄 Select a file to view</h2>
+                    <p>Click on any file in the left panel to view its contents</p>
+                </div>
+            </div>
+
+            <!-- Right Info Panel -->
+            <div class="info-panel" id="infoPanel">
+                <div class="panel-section">
+                    <div class="panel-header" onclick="toggleSection('metadata')">
+                        <span>📋 File Metadata</span>
+                        <span class="arrow" id="metadata-arrow">▼</span>
+                    </div>
+                    <div class="panel-content expanded" id="metadata-content">
+                        <div class="metadata-grid" id="metadata-display">
+                            <span class="metadata-label">File:</span>
+                            <span class="metadata-value filename" id="meta-filename">-</span>
+                            
+                            <span class="metadata-label">Full Path:</span>
+                            <span class="metadata-value" id="meta-path">-</span>
+                            
+                            <span class="metadata-label">Version:</span>
+                            <span class="metadata-value version" id="meta-version">-</span>
+                            
+                            <span class="metadata-label">Sprint:</span>
+                            <span class="metadata-value sprint" id="meta-sprint">-</span>
+                            
+                            <span class="metadata-label">Last Updated:</span>
+                            <span class="metadata-value" id="meta-updated">-</span>
+                            
+                            <span class="metadata-label">File Type:</span>
+                            <span class="metadata-value" id="meta-type">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <div class="panel-header" onclick="toggleSection('comments')">
+                        <span>💬 File Comments (<span id="comment-count">0</span>)</span>
+                        <span class="arrow" id="comments-arrow">▼</span>
+                    </div>
+                    <div class="panel-content expanded" id="comments-content">
+                        <div id="comments-display"></div>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <div class="panel-header" onclick="toggleSection('todos')">
+                        <span>🔧 TODOs (<span id="todo-count">0</span>)</span>
+                        <span class="arrow" id="todos-arrow">▼</span>
+                    </div>
+                    <div class="panel-content expanded" id="todos-content">
+                        <div id="todos-display"></div>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <div class="panel-header" onclick="toggleSection('notes')">
+                        <span>📝 Notes</span>
+                        <span class="arrow" id="notes-arrow">▼</span>
+                    </div>
+                    <div class="panel-content expanded" id="notes-content">
+                        <div class="notes-editor">
+                            <textarea id="notesText" placeholder="Write your notes here... (auto-saved locally)"></textarea>
+                            <div class="notes-actions">
+                                <button class="small-btn" onclick="saveNotes()">💾 Save</button>
+                                <button class="small-btn" onclick="clearNotes()">🗑️ Clear</button>
+                                <button class="small-btn" onclick="exportNotes()">📄 Export</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Stats Bar -->
+        <div class="bottom-stats">
+            <div class="stats-left" id="fileStats">
+                <div class="stat-item">📊 Total: <span class="stat-value" id="totalFiles">0</span></div>
+                <div class="stat-item">✅ Unchanged: <span class="stat-value" id="unchangedFiles">0</span></div>
+                <div class="stat-item stat-changed">📝 Modified: <span class="stat-value" id="modifiedFiles">0</span></div>
+                <div class="stat-item stat-added">➕ New: <span class="stat-value" id="newFiles">0</span></div>
+                <div class="stat-item stat-deleted">Deleted: <span class="stat-value" id="deletedFiles">0</span></div>
+            </div>
+            <div class="stats-right" id="changeStats">
+                <!-- Will be populated when file selected -->
+            </div>
+        </div>
+        <div id="statusMessage" class="status-message">Ready</div>
+        <div id="selfCheckPanel" class="self-check-panel"></div>
+    </div>
+
+    <div id="settingsPanel" class="settings-panel">
+        <div class="settings-header">
+            <span>Viewer Settings</span>
+            <button class="modal-close" onclick="hideSettingsPanel()">&times;</button>
+        </div>
+        <div class="settings-body">
+            <label for="themeSelect" class="settings-label">Theme</label>
+            <select id="themeSelect" class="theme-select" onchange="applyTheme(this.value)">
+                <option value="dark">Default Dark</option>
+                <option value="ocean">Ocean</option>
+                <option value="forest">Forest</option>
+                <option value="light">Light</option>
+            </select>
+            <label for="parserModeSelect" class="settings-label" style="margin-top: 0.8rem;">Import Parser</label>
+            <select id="parserModeSelect" class="theme-select" onchange="applyParserMode(this.value)">
+                <option value="auto">Auto Detect</option>
+                <option value="marker_v1">Marker V1 (#FILE-BEGIN)</option>
+                <option value="diff_v1">Diff V1 (#FILE/#DIFF)</option>
+            </select>
+            <label for="markdownModeSelect" class="settings-label" style="margin-top: 0.8rem;">Markdown Safety</label>
+            <select id="markdownModeSelect" class="theme-select" onchange="applyMarkdownMode(this.value)">
+                <option value="sanitized">Sanitized Render</option>
+                <option value="strict">Strict Plain Text</option>
+            </select>
+            <label for="snippetTagsInput" class="settings-label" style="margin-top: 0.8rem;">Snippet Tags</label>
+            <input type="text" id="snippetTagsInput" class="theme-select" placeholder="TODO, Do more research, Maybe later">
+            <div class="settings-actions">
+                <button class="small-btn" onclick="saveSnippetTagsFromSettings()">Save Tags</button>
+                <button class="small-btn" onclick="resetExportedSnippetHashes()">Reset Dedupe History</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div class="modal" id="importModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📥 Import Files from Conversation</h3>
+                <button class="modal-close" onclick="hideImportModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="file-upload-area" onclick="document.getElementById('fileInput').click()">
+                    <input type="file" id="fileInput" accept=".txt,.md" onchange="handleFileUpload(event)">
+                    <span>📄 Click to upload a text file or drag and drop</span>
+                </div>
+                
+                <div class="or-divider">OR</div>
+                
+                <textarea id="importText" class="import-textarea" placeholder="Paste conversation text with #FILE-BEGIN markers..."></textarea>
+                <button class="action-btn" onclick="parseImport()" style="width: 100%;">Parse Files</button>
+                
+                <div id="importResults" style="margin-top: 1rem; display: none;">
+                    <div class="import-bulk-actions">
+                        <button class="small-btn" onclick="setImportSelection('all')">Select All</button>
+                        <button class="small-btn" onclick="setImportSelection('changed')">Changed Only</button>
+                        <button class="small-btn" onclick="setImportSelection('none')">Clear</button>
+                    </div>
+                    <h4 style="color: #9cdcfe; margin-bottom: 0.5rem;">Files Found:</h4>
+                    <div id="importList"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn secondary" onclick="hideImportModal()">Cancel</button>
+                <button class="action-btn success" id="importConfirmBtn" onclick="confirmImport()" disabled>Import Selected</button>
+            </div>
+        </div>
+    </div>
+
+        <script src="./deepseek-parser.js"></script>
+    <script src="./dashboard.js"></script>
+</body>
+</html>
