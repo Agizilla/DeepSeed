@@ -107,10 +107,10 @@
         const PROJECT_STATE_STORAGE_KEY = 'deepseed_project_state_v1';
         const MAX_IMPORT_UNDO = 20;
         const HLJS_THEME_MAP = {
-            dark: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css',
-            ocean: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/night-owl.min.css',
-            forest: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/stackoverflow-dark.min.css',
-            light: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css'
+            dark: './node_modules/highlight.js/styles/vs2015.min.css',
+            ocean: './node_modules/highlight.js/styles/night-owl.min.css',
+            forest: './node_modules/highlight.js/styles/stackoverflow-dark.min.css',
+            light: './node_modules/highlight.js/styles/github.min.css'
         };
 
         // Initialize
@@ -172,16 +172,70 @@
             };
         }
 
+        function isValidFileTreeShape(tree) {
+            if (!tree || typeof tree !== 'object') return false;
+            const roots = Object.keys(tree);
+            if (roots.length === 0) return false;
+            const rootNode = tree[roots[0]];
+            return !!(rootNode && rootNode.type === 'folder' && rootNode.children && typeof rootNode.children === 'object');
+        }
+
+        function migrateLegacyRootPathsInMap(mapObj, fromRoot, toRoot) {
+            const result = {};
+            Object.entries(mapObj || {}).forEach(([key, value]) => {
+                const migratedKey = String(key || '').replace(new RegExp(`^${escapeRegex(fromRoot)}\\/`), `${toRoot}/`);
+                result[migratedKey] = value;
+            });
+            return result;
+        }
+
+        function migrateLegacyRootPathsInList(list, fromRoot, toRoot) {
+            return (Array.isArray(list) ? list : []).map(item =>
+                String(item || '').replace(new RegExp(`^${escapeRegex(fromRoot)}\\/`), `${toRoot}/`)
+            );
+        }
+
         function applyProjectStateSnapshot(snapshot) {
             if (!snapshot || typeof snapshot !== 'object') return false;
-            fileTree = snapshot.fileTree ? JSON.parse(JSON.stringify(snapshot.fileTree)) : JSON.parse(JSON.stringify(mockFiles));
-            originalFileContents = snapshot.originalFileContents ? { ...snapshot.originalFileContents } : {};
-            modifiedFiles = new Set(Array.isArray(snapshot.modifiedFiles) ? snapshot.modifiedFiles : []);
-            newFiles = new Set(Array.isArray(snapshot.newFiles) ? snapshot.newFiles : []);
-            deletedFiles = new Set(Array.isArray(snapshot.deletedFiles) ? snapshot.deletedFiles : []);
+            const incomingTree = snapshot.fileTree ? JSON.parse(JSON.stringify(snapshot.fileTree)) : JSON.parse(JSON.stringify(mockFiles));
+            if (!isValidFileTreeShape(incomingTree)) {
+                return false;
+            }
+
+            const incomingRoot = Object.keys(incomingTree)[0];
+            const defaultRoot = Object.keys(mockFiles)[0];
+            const needsLegacyMigration = incomingRoot === 'Mute' && defaultRoot !== 'Mute';
+
+            let normalizedTree = incomingTree;
+            let normalizedOriginals = snapshot.originalFileContents ? { ...snapshot.originalFileContents } : {};
+            let normalizedModified = Array.isArray(snapshot.modifiedFiles) ? snapshot.modifiedFiles : [];
+            let normalizedNew = Array.isArray(snapshot.newFiles) ? snapshot.newFiles : [];
+            let normalizedDeleted = Array.isArray(snapshot.deletedFiles) ? snapshot.deletedFiles : [];
+            let normalizedCurrentFile = snapshot.currentFile || null;
+            let normalizedCurrentFilePath = snapshot.currentFilePath || normalizedCurrentFile;
+
+            if (needsLegacyMigration) {
+                normalizedTree = { [defaultRoot]: normalizedTree[incomingRoot] };
+                normalizedOriginals = migrateLegacyRootPathsInMap(normalizedOriginals, incomingRoot, defaultRoot);
+                normalizedModified = migrateLegacyRootPathsInList(normalizedModified, incomingRoot, defaultRoot);
+                normalizedNew = migrateLegacyRootPathsInList(normalizedNew, incomingRoot, defaultRoot);
+                normalizedDeleted = migrateLegacyRootPathsInList(normalizedDeleted, incomingRoot, defaultRoot);
+                if (normalizedCurrentFile) {
+                    normalizedCurrentFile = String(normalizedCurrentFile).replace(new RegExp(`^${escapeRegex(incomingRoot)}\\/`), `${defaultRoot}/`);
+                }
+                if (normalizedCurrentFilePath) {
+                    normalizedCurrentFilePath = String(normalizedCurrentFilePath).replace(new RegExp(`^${escapeRegex(incomingRoot)}\\/`), `${defaultRoot}/`);
+                }
+            }
+
+            fileTree = normalizedTree;
+            originalFileContents = normalizedOriginals;
+            modifiedFiles = new Set(normalizedModified);
+            newFiles = new Set(normalizedNew);
+            deletedFiles = new Set(normalizedDeleted);
             basePath = String(snapshot.basePath || '').trim() || `./${getProjectRootName()}`;
-            currentFile = snapshot.currentFile || null;
-            currentFilePath = snapshot.currentFilePath || currentFile;
+            currentFile = normalizedCurrentFile;
+            currentFilePath = normalizedCurrentFilePath;
             return true;
         }
 
@@ -201,7 +255,16 @@
                 const raw = localStorage.getItem(PROJECT_STATE_STORAGE_KEY);
                 if (raw) {
                     const parsed = JSON.parse(raw);
-                    applyProjectStateSnapshot(parsed);
+                    const loaded = applyProjectStateSnapshot(parsed);
+                    if (!loaded) {
+                        fileTree = JSON.parse(JSON.stringify(mockFiles));
+                        originalFileContents = {};
+                        modifiedFiles = new Set();
+                        newFiles = new Set();
+                        deletedFiles = new Set();
+                        currentFile = null;
+                        currentFilePath = null;
+                    }
                     importUndoStack = Array.isArray(parsed.importUndoStack) ? parsed.importUndoStack.slice(0, MAX_IMPORT_UNDO) : [];
                 } else {
                     basePath = localStorage.getItem('deepseed_base_path') || basePath;
@@ -854,6 +917,9 @@
             let normalized = path.replace(/\\/g, '/').trim();
             normalized = normalized.replace(/^\.?\//, '');
             const root = getProjectRootName();
+            if (normalized.startsWith('Mute/')) {
+                normalized = `${root}/${normalized.slice('Mute/'.length)}`;
+            }
             if (!normalized.startsWith(root)) {
                 normalized = `${root}/${normalized}`;
             }

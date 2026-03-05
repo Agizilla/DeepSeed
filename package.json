@@ -1,0 +1,30 @@
+{
+  "name": "deepseekprojectviewer",
+  "version": "1.0.0",
+  "description": "Browser-first project dashboard for AI-assisted coding workflows.",
+  "main": "dashboard.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Agizilla/DeepSeed.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Agizilla/DeepSeed/issues"
+  },
+  "homepage": "https://github.com/Agizilla/DeepSeed#readme",
+  "dependencies": {
+    "file-saver": "^2.0.5",
+    "highlight.js": "^11.11.1",
+    "jszip": "^3.10.1",
+    "marked": "^17.0.4"
+  }
+}
