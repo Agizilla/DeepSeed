@@ -94,3 +94,62 @@ test("auto mode selects diff_v1 when diff markers exist", () => {
     assert.equal(result.parser, "diff_v1");
     assert.equal(result.files.length, 1);
 });
+
+test("marker_v1 reports error for empty filepath", () => {
+    const input = [
+        "#FILE-BEGIN   ",
+        "#FILE-END"
+    ].join("\n");
+
+    const result = parser.parseImport(input, { preferredFormat: "marker_v1" });
+    assert.equal(result.files.length, 0);
+    assert.equal(result.errors.length, 1);
+});
+
+test("diff_v1 reports missing diff content", () => {
+    const input = [
+        "#FILE: docs/missing.md",
+        "#OP: CREATE"
+    ].join("\n");
+
+    const result = parser.parseImport(input, { preferredFormat: "diff_v1", strict: true });
+    assert.equal(result.files.length, 0);
+    assert.equal(result.errors.length, 1);
+});
+
+test("diff_v1 MODIFY requires base resolver", () => {
+    const input = [
+        "#FILE: src/app.py",
+        "#OP: MODIFY",
+        "#DIFF:",
+        "@@",
+        " print('a')",
+        "-print('b')",
+        "+print('c')"
+    ].join("\n");
+
+    const result = parser.parseImport(input, { preferredFormat: "diff_v1", strict: true });
+    assert.equal(result.files.length, 0);
+    assert.equal(result.errors.length, 1);
+});
+
+test("diff_v1 MODIFY reports context mismatch", () => {
+    const input = [
+        "#FILE: src/app.py",
+        "#OP: MODIFY",
+        "#DIFF:",
+        "@@",
+        " print('a')",
+        "-print('x')",
+        "+print('c')"
+    ].join("\n");
+
+    const result = parser.parseImport(input, {
+        preferredFormat: "diff_v1",
+        getFileContent: () => "print('a')\nprint('b')",
+        strict: true
+    });
+
+    assert.equal(result.files.length, 0);
+    assert.equal(result.errors.length, 1);
+});

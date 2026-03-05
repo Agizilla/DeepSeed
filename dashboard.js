@@ -106,6 +106,8 @@
         const DEFAULT_DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions';
         const PROJECT_STATE_STORAGE_KEY = 'deepseed_project_state_v1';
         const MAX_IMPORT_UNDO = 20;
+        const STORAGE_PREFIX = 'deepseed_';
+        const LEGACY_STORAGE_PREFIX = 'mute_';
         const HLJS_THEME_MAP = {
             dark: './node_modules/highlight.js/styles/vs2015.min.css',
             ocean: './node_modules/highlight.js/styles/night-owl.min.css',
@@ -115,6 +117,7 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
+            migrateLegacyLocalStorageKeys();
             hydrateProjectState();
             loadDocTabs();
             renderFileTree();
@@ -141,6 +144,51 @@
 
             window.addEventListener('beforeunload', persistProjectState);
         });
+
+        function migrateLegacyLocalStorageKeys() {
+            if (typeof localStorage === 'undefined') return;
+            try {
+                const exactMap = [
+                    { oldKey: 'mute_theme', newKey: 'deepseed_theme' },
+                    { oldKey: 'mute_parser_mode', newKey: 'deepseed_parser_mode' },
+                    { oldKey: 'mute_markdown_mode', newKey: 'deepseed_markdown_mode' },
+                    { oldKey: 'mute_snippet_queue', newKey: 'deepseed_snippet_queue' },
+                    { oldKey: 'mute_snippet_files', newKey: 'deepseed_snippet_files' },
+                    { oldKey: 'mute_exported_snippet_hashes', newKey: 'deepseed_exported_snippet_hashes' },
+                    { oldKey: 'mute_snippet_tags', newKey: 'deepseed_snippet_tags' }
+                ];
+
+                exactMap.forEach(({ oldKey, newKey }) => {
+                    const existing = localStorage.getItem(newKey);
+                    if (existing !== null) return;
+                    const legacy = localStorage.getItem(oldKey);
+                    if (legacy !== null) {
+                        localStorage.setItem(newKey, legacy);
+                    }
+                });
+
+                const prefixMap = [
+                    { oldPrefix: 'mute_notes_', newPrefix: 'deepseed_notes_' },
+                    { oldPrefix: 'mute_extracted_', newPrefix: 'deepseed_extracted_' }
+                ];
+
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (!key) continue;
+                    prefixMap.forEach(({ oldPrefix, newPrefix }) => {
+                        if (!key.startsWith(oldPrefix)) return;
+                        const newKey = newPrefix + key.slice(oldPrefix.length);
+                        if (localStorage.getItem(newKey) !== null) return;
+                        const value = localStorage.getItem(key);
+                        if (value !== null) {
+                            localStorage.setItem(newKey, value);
+                        }
+                    });
+                }
+            } catch (error) {
+                console.warn('Legacy localStorage migration failed:', error);
+            }
+        }
 
         function getProjectRootName() {
             const root = Object.keys(fileTree || {})[0];
@@ -321,7 +369,7 @@
 
         function loadSnippetQueue() {
             try {
-                const raw = localStorage.getItem('mute_snippet_queue');
+                const raw = localStorage.getItem('deepseed_snippet_queue');
                 return raw ? JSON.parse(raw) : [];
             } catch (error) {
                 return [];
@@ -330,7 +378,7 @@
 
         function loadSnippetFiles() {
             try {
-                const raw = localStorage.getItem('mute_snippet_files');
+                const raw = localStorage.getItem('deepseed_snippet_files');
                 return raw ? JSON.parse(raw) : {};
             } catch (error) {
                 return {};
@@ -338,10 +386,10 @@
         }
 
         function persistSnippetState() {
-            localStorage.setItem('mute_snippet_queue', JSON.stringify(snippetQueue));
-            localStorage.setItem('mute_snippet_files', JSON.stringify(snippetFiles));
-            localStorage.setItem('mute_exported_snippet_hashes', JSON.stringify([...exportedSnippetHashes]));
-            localStorage.setItem('mute_snippet_tags', JSON.stringify(snippetTags));
+            localStorage.setItem('deepseed_snippet_queue', JSON.stringify(snippetQueue));
+            localStorage.setItem('deepseed_snippet_files', JSON.stringify(snippetFiles));
+            localStorage.setItem('deepseed_exported_snippet_hashes', JSON.stringify([...exportedSnippetHashes]));
+            localStorage.setItem('deepseed_snippet_tags', JSON.stringify(snippetTags));
         }
 
         function updateSnippetStatus() {
@@ -353,7 +401,7 @@
 
         function loadExportedSnippetHashes() {
             try {
-                const raw = localStorage.getItem('mute_exported_snippet_hashes');
+                const raw = localStorage.getItem('deepseed_exported_snippet_hashes');
                 const list = raw ? JSON.parse(raw) : [];
                 return new Set(Array.isArray(list) ? list : []);
             } catch (error) {
@@ -382,7 +430,7 @@
 
         function loadSnippetTags() {
             try {
-                const raw = localStorage.getItem('mute_snippet_tags');
+                const raw = localStorage.getItem('deepseed_snippet_tags');
                 if (!raw) return [...snippetTags];
                 const parsed = JSON.parse(raw);
                 const normalized = normalizeSnippetTags(parsed);
@@ -653,7 +701,7 @@
                     endpointInput.value = parsed.endpoint;
                     localStorage.setItem('deepseek_endpoint', parsed.endpoint);
                 }
-                if (parsed.snippetTags && parsed.snippetTags.length > 0 && !localStorage.getItem('mute_snippet_tags')) {
+                if (parsed.snippetTags && parsed.snippetTags.length > 0 && !localStorage.getItem('deepseed_snippet_tags')) {
                     snippetTags = normalizeSnippetTags(parsed.snippetTags);
                     persistSnippetState();
                     renderSnippetTagButtons();
@@ -1277,17 +1325,17 @@
         }
 
         function applyStoredTheme() {
-            const stored = localStorage.getItem('mute_theme') || 'dark';
+            const stored = localStorage.getItem('deepseed_theme') || 'dark';
             applyTheme(stored, false);
         }
 
         function applyStoredParserMode() {
-            const stored = localStorage.getItem('mute_parser_mode') || 'auto';
+            const stored = localStorage.getItem('deepseed_parser_mode') || 'auto';
             applyParserMode(stored, false);
         }
 
         function applyStoredMarkdownMode() {
-            const stored = localStorage.getItem('mute_markdown_mode') || 'sanitized';
+            const stored = localStorage.getItem('deepseed_markdown_mode') || 'sanitized';
             applyMarkdownMode(stored, false);
         }
 
@@ -1308,7 +1356,7 @@
             document.body.classList.add(`theme-${normalized}`);
             applyCodeTheme(normalized);
             currentTheme = normalized;
-            localStorage.setItem('mute_theme', normalized);
+            localStorage.setItem('deepseed_theme', normalized);
 
             const selector = document.getElementById('themeSelect');
             if (selector && selector.value !== normalized) {
@@ -1324,7 +1372,7 @@
             const validModes = ['auto', 'marker_v1', 'diff_v1'];
             const normalized = validModes.includes(mode) ? mode : 'auto';
             currentParserMode = normalized;
-            localStorage.setItem('mute_parser_mode', normalized);
+            localStorage.setItem('deepseed_parser_mode', normalized);
 
             const selector = document.getElementById('parserModeSelect');
             if (selector && selector.value !== normalized) {
@@ -1340,7 +1388,7 @@
             const validModes = ['sanitized', 'strict'];
             const normalized = validModes.includes(mode) ? mode : 'sanitized';
             currentMarkdownMode = normalized;
-            localStorage.setItem('mute_markdown_mode', normalized);
+            localStorage.setItem('deepseed_markdown_mode', normalized);
 
             const selector = document.getElementById('markdownModeSelect');
             if (selector && selector.value !== normalized) {
@@ -1472,12 +1520,12 @@
             };
             
             const key = projectPath ? toProjectPath(projectPath) : filename;
-            localStorage.setItem(`mute_extracted_${key}`, JSON.stringify(extractedData));
+            localStorage.setItem(`deepseed_extracted_${key}`, JSON.stringify(extractedData));
         }
 
         function loadExtractedData(fileKey) {
             const key = toProjectPath(fileKey);
-            const data = localStorage.getItem(`mute_extracted_${key}`);
+            const data = localStorage.getItem(`deepseed_extracted_${key}`);
             if (data) {
                 try {
                     const parsed = JSON.parse(data);
@@ -1515,7 +1563,7 @@
 
         function loadNotes() {
             if (!currentFile) return;
-            const notes = localStorage.getItem(`mute_notes_${currentFile}`);
+            const notes = localStorage.getItem(`deepseed_notes_${currentFile}`);
             document.getElementById('notesText').value = notes || '';
             notesCache[currentFile] = notes || '';
         }
@@ -1524,7 +1572,7 @@
             if (!currentFile) return;
             const notes = document.getElementById('notesText').value;
             if (notesCache[currentFile] === notes) return;
-            localStorage.setItem(`mute_notes_${currentFile}`, notes);
+            localStorage.setItem(`deepseed_notes_${currentFile}`, notes);
             notesCache[currentFile] = notes;
             if (showStatus) {
                 setStatus(`Notes saved for ${currentFile}`);
@@ -1534,7 +1582,7 @@
         function clearNotes() {
             if (!currentFile) return;
             if (confirm('Clear all notes for this file?')) {
-                localStorage.removeItem(`mute_notes_${currentFile}`);
+                localStorage.removeItem(`deepseed_notes_${currentFile}`);
                 document.getElementById('notesText').value = '';
                 notesCache[currentFile] = '';
                 setStatus('Notes cleared');

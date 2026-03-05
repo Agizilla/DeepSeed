@@ -2,11 +2,11 @@
 
 ## Immediate
 
-- [ ] Add integration-like smoke test for import -> parse -> apply path.
-- [ ] Validate API error mapping (`401`, `402`, `429`, `5xx`) to user-friendly statuses.
-- [ ] Add parser regression fixtures for marker and diff modes.
-- [ ] Add UI test checklist for theme switching and settings persistence.
-- [ ] Add migration/normalization pass for legacy localStorage key prefixes (`mute_*` -> `deepseed_*`).
+- [x] Add integration-like smoke test for import -> parse -> apply path.
+- [x] Validate API error mapping (`401`, `402`, `429`, `5xx`) to user-friendly statuses.
+- [x] Add parser regression fixtures for marker and diff modes.
+- [x] Add UI test checklist for theme switching and settings persistence.
+- [x] Add migration/normalization pass for legacy localStorage key prefixes (`mute_*` -> `deepseed_*`).
 
 ## Next
 
