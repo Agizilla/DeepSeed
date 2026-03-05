@@ -771,6 +771,44 @@
             if (askParseBtn) askParseBtn.disabled = isBusy;
         }
 
+        function getApiErrorPresentation(statusCode, detailText) {
+            const detail = String(detailText || '').trim();
+            const suffix = detail ? `\n${detail.slice(0, 500)}` : '';
+            if (statusCode === 401) {
+                return {
+                    auth: 'Unauthorized (401): check API key',
+                    status: 'DeepSeek auth failed (401)',
+                    output: `Request failed (401 Unauthorized): API key is invalid or expired.${suffix}`
+                };
+            }
+            if (statusCode === 402) {
+                return {
+                    auth: 'Billing issue (402): insufficient balance',
+                    status: 'DeepSeek billing issue (402)',
+                    output: `Request failed (402): account has insufficient balance/quota.${suffix}`
+                };
+            }
+            if (statusCode === 429) {
+                return {
+                    auth: 'Rate limited (429): retry shortly',
+                    status: 'DeepSeek rate limited (429)',
+                    output: `Request failed (429): rate limit reached. Retry with backoff.${suffix}`
+                };
+            }
+            if (statusCode >= 500 && statusCode <= 599) {
+                return {
+                    auth: `DeepSeek server error (${statusCode})`,
+                    status: `DeepSeek server error (${statusCode})`,
+                    output: `Request failed (${statusCode}): DeepSeek service error. Retry shortly.${suffix}`
+                };
+            }
+            return {
+                auth: `Request failed (${statusCode})`,
+                status: `DeepSeek request failed (${statusCode})`,
+                output: `Request failed (${statusCode}).${suffix}`
+            };
+        }
+
         async function askDeepseek(autoParse) {
             const promptEl = document.getElementById('aiPromptInput');
             const outputEl = document.getElementById('aiResponseOutput');
@@ -827,7 +865,10 @@
 
                 if (!response.ok) {
                     const errText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errText.slice(0, 400)}`);
+                    const apiError = new Error(`HTTP ${response.status}: ${errText.slice(0, 400)}`);
+                    apiError.httpStatus = response.status;
+                    apiError.httpBody = errText;
+                    throw apiError;
                 }
 
                 const data = await response.json();
@@ -847,9 +888,25 @@
                 }
             } catch (error) {
                 clearTimeout(timeout);
-                outputEl.value = `Request failed:\n${error.message}`;
-                setStatus('DeepSeek request failed', true);
-                updateAiAuthStatus('Request failed', true);
+                if (error && error.name === 'AbortError') {
+                    outputEl.value = 'Request failed:\nRequest timed out after 60 seconds.';
+                    setStatus('DeepSeek request timed out', true);
+                    updateAiAuthStatus('Request timed out', true);
+                    setLoginButtonState('failed');
+                    return;
+                }
+
+                const statusCode = Number(error && error.httpStatus);
+                if (Number.isFinite(statusCode) && statusCode > 0) {
+                    const view = getApiErrorPresentation(statusCode, error.httpBody || error.message || '');
+                    outputEl.value = view.output;
+                    setStatus(view.status, true);
+                    updateAiAuthStatus(view.auth, true);
+                } else {
+                    outputEl.value = `Request failed:\n${error.message}`;
+                    setStatus('DeepSeek request failed', true);
+                    updateAiAuthStatus('Request failed', true);
+                }
                 setLoginButtonState('failed');
             } finally {
                 setAiBusy(false);
