@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -23,12 +23,13 @@
             <div class="project-title">DeepSeed Viewer v2.0</div>
             <div class="folder-selector">
                 <label for="baseFolder">Base Path:</label>
-                <input type="text" id="baseFolder" class="folder-input" placeholder="/path/to/Mute" value="./Mute">
+                <input type="text" id="baseFolder" class="folder-input" placeholder="/path/to/project" value="./DeepSeedProject">
                 <button class="action-btn" onclick="loadFileTree()">Load</button>
             </div>
             <div class="top-actions">
-                <button class="action-btn primary" onclick="showImportModal()">📥 Import Convo</button>
-                <button class="action-btn success" id="saveChangesBtn" onclick="downloadZip()" disabled>💾 Save Changes (ZIP)</button>
+                <button class="action-btn primary" onclick="showImportModal()">ðŸ“¥ Import Convo</button>
+                <button class="action-btn warning" onclick="undoLastImport()">Undo Last Import</button>
+                <button class="action-btn success" id="saveChangesBtn" onclick="downloadZip()" disabled>ðŸ’¾ Save Changes (ZIP)</button>
                 <button class="action-btn" onclick="runSelfCheck()">Run Self Check</button>
                 <button class="action-btn" id="aiPanelToggleBtn" onclick="toggleAiPanel()">AI</button>
             </div>
@@ -36,7 +37,7 @@
                 <!-- Doc tabs will be populated here -->
             </div>
             <div class="top-settings">
-                <button id="settingsBtn" class="toolbox-btn" title="Viewer Settings" onclick="toggleSettingsPanel()">🧰</button>
+                <button id="settingsBtn" class="toolbox-btn" title="Viewer Settings" onclick="toggleSettingsPanel()">ðŸ§°</button>
             </div>
         </div>
 
@@ -80,11 +81,11 @@
             <!-- Left File Tree -->
             <div class="file-tree">
                 <div class="file-tree-header">
-                    <span>📂 Project Files</span>
+                    <span>ðŸ“‚ Project Files</span>
                     <span id="fileCount"></span>
                 </div>
                 <div id="exportSummary" class="export-summary" style="display: none;">
-                    <span>📦 Ready to export:</span> <span id="exportCount">0</span> files
+                    <span>ðŸ“¦ Ready to export:</span> <span id="exportCount">0</span> files
                 </div>
                 <div id="fileTree">
                     <!-- File tree will be populated here -->
@@ -97,7 +98,7 @@
             <!-- Center File Viewer -->
             <div class="file-viewer" id="fileViewer">
                 <div style="color: #666; text-align: center; margin-top: 2rem;">
-                    <h2>📄 Select a file to view</h2>
+                    <h2>ðŸ“„ Select a file to view</h2>
                     <p>Click on any file in the left panel to view its contents</p>
                 </div>
             </div>
@@ -106,8 +107,8 @@
             <div class="info-panel" id="infoPanel">
                 <div class="panel-section">
                     <div class="panel-header" onclick="toggleSection('metadata')">
-                        <span>📋 File Metadata</span>
-                        <span class="arrow" id="metadata-arrow">▼</span>
+                        <span>ðŸ“‹ File Metadata</span>
+                        <span class="arrow" id="metadata-arrow">â–¼</span>
                     </div>
                     <div class="panel-content expanded" id="metadata-content">
                         <div class="metadata-grid" id="metadata-display">
@@ -134,8 +135,8 @@
 
                 <div class="panel-section">
                     <div class="panel-header" onclick="toggleSection('comments')">
-                        <span>💬 File Comments (<span id="comment-count">0</span>)</span>
-                        <span class="arrow" id="comments-arrow">▼</span>
+                        <span>ðŸ’¬ File Comments (<span id="comment-count">0</span>)</span>
+                        <span class="arrow" id="comments-arrow">â–¼</span>
                     </div>
                     <div class="panel-content expanded" id="comments-content">
                         <div id="comments-display"></div>
@@ -144,8 +145,8 @@
 
                 <div class="panel-section">
                     <div class="panel-header" onclick="toggleSection('todos')">
-                        <span>🔧 TODOs (<span id="todo-count">0</span>)</span>
-                        <span class="arrow" id="todos-arrow">▼</span>
+                        <span>ðŸ”§ TODOs (<span id="todo-count">0</span>)</span>
+                        <span class="arrow" id="todos-arrow">â–¼</span>
                     </div>
                     <div class="panel-content expanded" id="todos-content">
                         <div id="todos-display"></div>
@@ -154,16 +155,16 @@
 
                 <div class="panel-section">
                     <div class="panel-header" onclick="toggleSection('notes')">
-                        <span>📝 Notes</span>
-                        <span class="arrow" id="notes-arrow">▼</span>
+                        <span>ðŸ“ Notes</span>
+                        <span class="arrow" id="notes-arrow">â–¼</span>
                     </div>
                     <div class="panel-content expanded" id="notes-content">
                         <div class="notes-editor">
                             <textarea id="notesText" placeholder="Write your notes here... (auto-saved locally)"></textarea>
                             <div class="notes-actions">
-                                <button class="small-btn" onclick="saveNotes()">💾 Save</button>
-                                <button class="small-btn" onclick="clearNotes()">🗑️ Clear</button>
-                                <button class="small-btn" onclick="exportNotes()">📄 Export</button>
+                                <button class="small-btn" onclick="saveNotes()">ðŸ’¾ Save</button>
+                                <button class="small-btn" onclick="clearNotes()">ðŸ—‘ï¸ Clear</button>
+                                <button class="small-btn" onclick="exportNotes()">ðŸ“„ Export</button>
                             </div>
                         </div>
                     </div>
@@ -174,10 +175,10 @@
         <!-- Bottom Stats Bar -->
         <div class="bottom-stats">
             <div class="stats-left" id="fileStats">
-                <div class="stat-item">📊 Total: <span class="stat-value" id="totalFiles">0</span></div>
-                <div class="stat-item">✅ Unchanged: <span class="stat-value" id="unchangedFiles">0</span></div>
-                <div class="stat-item stat-changed">📝 Modified: <span class="stat-value" id="modifiedFiles">0</span></div>
-                <div class="stat-item stat-added">➕ New: <span class="stat-value" id="newFiles">0</span></div>
+                <div class="stat-item">ðŸ“Š Total: <span class="stat-value" id="totalFiles">0</span></div>
+                <div class="stat-item">âœ… Unchanged: <span class="stat-value" id="unchangedFiles">0</span></div>
+                <div class="stat-item stat-changed">ðŸ“ Modified: <span class="stat-value" id="modifiedFiles">0</span></div>
+                <div class="stat-item stat-added">âž• New: <span class="stat-value" id="newFiles">0</span></div>
                 <div class="stat-item stat-deleted">Deleted: <span class="stat-value" id="deletedFiles">0</span></div>
             </div>
             <div class="stats-right" id="changeStats">
@@ -225,13 +226,13 @@
     <div class="modal" id="importModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>📥 Import Files from Conversation</h3>
+                <h3>ðŸ“¥ Import Files from Conversation</h3>
                 <button class="modal-close" onclick="hideImportModal()">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="file-upload-area" onclick="document.getElementById('fileInput').click()">
                     <input type="file" id="fileInput" accept=".txt,.md" onchange="handleFileUpload(event)">
-                    <span>📄 Click to upload a text file or drag and drop</span>
+                    <span>ðŸ“„ Click to upload a text file or drag and drop</span>
                 </div>
                 
                 <div class="or-divider">OR</div>
@@ -260,3 +261,4 @@
     <script src="./dashboard.js"></script>
 </body>
 </html>
+

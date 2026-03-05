@@ -1,6 +1,6 @@
-        // Mock file system data based on the Mute project structure
+        // Mock file system data based on a generic project structure
         const mockFiles = {
-            "Mute": {
+            "DeepSeedProject": {
                 type: "folder",
                 children: {
                     "main.py": { type: "file", ext: "py", content: getDefaultContent("main.py", "py") },
@@ -75,14 +75,15 @@
         };
 
         // State
-        let currentFile = null; // Canonical project path, e.g. Mute/docs/README.md
+        let currentFile = null; // Canonical project path, e.g. DeepSeedProject/docs/README.md
         let currentFilePath = null;
         let fileTree = JSON.parse(JSON.stringify(mockFiles)); // Deep copy
         let originalFileContents = {};
         let modifiedFiles = new Set();
         let newFiles = new Set();
         let deletedFiles = new Set();
-        let basePath = "./Mute";
+        let basePath = "./DeepSeedProject";
+        let importUndoStack = [];
         let docTabs = ['README.md', 'Tasks.md', 'Status.md', 'Roadmap.md', 'RELEASE_NOTES.md', 'CONTRIBUTING.md', 'INSTALL.md'];
         let panelStates = {
             metadata: true,
@@ -103,6 +104,8 @@
         let snippetTags = ['TODO', 'Do more research', 'Maybe later', 'Look into this'];
         const DEFAULT_DEEPSEEK_MODEL = 'deepseek-coder';
         const DEFAULT_DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions';
+        const PROJECT_STATE_STORAGE_KEY = 'deepseed_project_state_v1';
+        const MAX_IMPORT_UNDO = 20;
         const HLJS_THEME_MAP = {
             dark: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css',
             ocean: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/night-owl.min.css',
@@ -112,11 +115,14 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
+            hydrateProjectState();
             loadDocTabs();
             renderFileTree();
             loadNotes();
             loadAllExtractedData();
-            captureOriginalContents();
+            if (Object.keys(originalFileContents).length === 0) {
+                captureOriginalContents();
+            }
             updateStats();
             updateExportSummary();
             setupImportDropzone();
@@ -132,7 +138,91 @@
                     saveNotes(false);
                 }
             }, 2000);
+
+            window.addEventListener('beforeunload', persistProjectState);
         });
+
+        function getProjectRootName() {
+            const root = Object.keys(fileTree || {})[0];
+            return root || 'DeepSeedProject';
+        }
+
+        function escapeRegex(value) {
+            return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function getProjectRootPrefixRegex() {
+            return new RegExp(`^${escapeRegex(getProjectRootName())}\\/?`);
+        }
+
+        function stripProjectRoot(projectPath) {
+            return toProjectPath(projectPath).replace(getProjectRootPrefixRegex(), '');
+        }
+
+        function snapshotProjectState() {
+            return {
+                fileTree: JSON.parse(JSON.stringify(fileTree)),
+                originalFileContents: { ...originalFileContents },
+                modifiedFiles: [...modifiedFiles],
+                newFiles: [...newFiles],
+                deletedFiles: [...deletedFiles],
+                basePath,
+                currentFile,
+                currentFilePath
+            };
+        }
+
+        function applyProjectStateSnapshot(snapshot) {
+            if (!snapshot || typeof snapshot !== 'object') return false;
+            fileTree = snapshot.fileTree ? JSON.parse(JSON.stringify(snapshot.fileTree)) : JSON.parse(JSON.stringify(mockFiles));
+            originalFileContents = snapshot.originalFileContents ? { ...snapshot.originalFileContents } : {};
+            modifiedFiles = new Set(Array.isArray(snapshot.modifiedFiles) ? snapshot.modifiedFiles : []);
+            newFiles = new Set(Array.isArray(snapshot.newFiles) ? snapshot.newFiles : []);
+            deletedFiles = new Set(Array.isArray(snapshot.deletedFiles) ? snapshot.deletedFiles : []);
+            basePath = String(snapshot.basePath || '').trim() || `./${getProjectRootName()}`;
+            currentFile = snapshot.currentFile || null;
+            currentFilePath = snapshot.currentFilePath || currentFile;
+            return true;
+        }
+
+        function persistProjectState() {
+            try {
+                const payload = snapshotProjectState();
+                payload.importUndoStack = importUndoStack;
+                localStorage.setItem(PROJECT_STATE_STORAGE_KEY, JSON.stringify(payload));
+            } catch (error) {
+                console.warn('Failed to persist project state:', error);
+            }
+        }
+
+        function hydrateProjectState() {
+            const input = document.getElementById('baseFolder');
+            try {
+                const raw = localStorage.getItem(PROJECT_STATE_STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    applyProjectStateSnapshot(parsed);
+                    importUndoStack = Array.isArray(parsed.importUndoStack) ? parsed.importUndoStack.slice(0, MAX_IMPORT_UNDO) : [];
+                } else {
+                    basePath = localStorage.getItem('deepseed_base_path') || basePath;
+                    importUndoStack = [];
+                }
+            } catch (error) {
+                importUndoStack = [];
+            }
+
+            if (input) {
+                input.value = basePath;
+            }
+        }
+
+        function pushUndoSnapshot() {
+            importUndoStack.push(snapshotProjectState());
+            if (importUndoStack.length > MAX_IMPORT_UNDO) {
+                importUndoStack = importUndoStack.slice(importUndoStack.length - MAX_IMPORT_UNDO);
+            }
+            persistProjectState();
+        }
 
         function initAiAssistant() {
             const modelInput = document.getElementById('deepseekModelInput');
@@ -753,24 +843,25 @@
             } else if (ext === 'md') {
                 return `# ${filename}\n\n## Overview\n\nThis is the ${filename} documentation.\n\n## Details\n\nContent goes here.\n`;
             } else if (ext === 'json') {
-                return `{\n    "name": "mute",\n    "version": "2.0.0",\n    "description": "Mute Project"\n}\n`;
+                return `{\n    "name": "deepseed-project",\n    "version": "2.0.0",\n    "description": "DeepSeed Project"\n}\n`;
             } else {
                 return `# ${filename}\n\nContent for ${filename}\n`;
             }
         }
 
         function toProjectPath(path) {
-            if (!path) return 'Mute';
+            if (!path) return getProjectRootName();
             let normalized = path.replace(/\\/g, '/').trim();
             normalized = normalized.replace(/^\.?\//, '');
-            if (!normalized.startsWith('Mute')) {
-                normalized = `Mute/${normalized}`;
+            const root = getProjectRootName();
+            if (!normalized.startsWith(root)) {
+                normalized = `${root}/${normalized}`;
             }
             return normalized.replace(/\/+/g, '/').replace(/\/$/, '');
         }
 
         function toDisplayPath(projectPath) {
-            const relPath = toProjectPath(projectPath).replace(/^Mute\/?/, '');
+            const relPath = stripProjectRoot(projectPath);
             return `${basePath}/${relPath}`.replace(/\/+/g, '/');
         }
 
@@ -822,7 +913,7 @@
             });
             
             // Update file count
-            const count = countAllFiles(fileTree['Mute']);
+            const count = countAllFiles(fileTree[getProjectRootName()]);
             document.getElementById('fileCount').textContent = `${count} files`;
             updateStats();
             updateExportSummary();
@@ -1187,7 +1278,7 @@
 
         function loadDocument(docName) {
             const ext = docName.split('.').pop();
-            const projectPath = `Mute/docs/${docName}`;
+            const projectPath = `${getProjectRootName()}/docs/${docName}`;
             const fileNode = findFileNodeByPath(projectPath);
             if (fileNode) {
                 loadFile(docName, ext, projectPath, fileNode);
@@ -1345,7 +1436,7 @@
         }
 
         function updateStats() {
-            const total = countAllFiles(fileTree['Mute']);
+            const total = countAllFiles(fileTree[getProjectRootName()]);
             const modified = modifiedFiles.size;
             const newF = newFiles.size;
             const deleted = deletedFiles.size;
@@ -1446,7 +1537,7 @@
                     
                     // Check if this file should be included
                     if (modifiedFiles.has(fullPath) || newFiles.has(fullPath)) {
-                        const filePath = fullPath.replace(/^Mute\/?/, '');
+                        const filePath = stripProjectRoot(fullPath);
                         zip.file(filePath, node.content);
                         fileCount++;
                     }
@@ -1467,7 +1558,7 @@
             if (deletedFiles.size > 0) {
                 const deletionManifest = [
                     '# Deleted files',
-                    ...[...deletedFiles].map(path => path.replace(/^Mute\/?/, ''))
+                    ...[...deletedFiles].map(path => stripProjectRoot(path))
                 ].join('\n');
                 zip.file('_DELETIONS.txt', deletionManifest);
                 fileCount++;
@@ -1486,7 +1577,7 @@
                 compression: 'DEFLATE',
                 compressionOptions: { level: 6 }
             }).then(content => {
-                saveAs(content, `mute_changes_${new Date().toISOString().slice(0,10)}.zip`);
+                saveAs(content, `deepseed_changes_${new Date().toISOString().slice(0,10)}.zip`);
                 setStatus(`✅ Exported ${fileCount} changed files`);
             }).catch(error => {
                 console.error('Zip error:', error);
@@ -1688,6 +1779,11 @@
 
         function confirmImport() {
             const selectedFiles = importFiles.filter(f => f.selected);
+            if (selectedFiles.length === 0) {
+                setStatus('No selected files to import', true);
+                return;
+            }
+            pushUndoSnapshot();
             let imported = 0;
             let updated = 0;
             let removed = 0;
@@ -1726,10 +1822,10 @@
                     updated++;
                 } else {
                     // Create new file in appropriate folder
-                    const relativePath = projectPath.replace(/^Mute\/?/, '');
+                    const relativePath = stripProjectRoot(projectPath);
                     const pathParts = relativePath.split('/');
                     const newFilename = pathParts.pop();
-                    let current = fileTree['Mute'];
+                    let current = fileTree[getProjectRootName()];
                     
                     // Navigate to/create folders
                     for (const part of pathParts) {
@@ -1760,6 +1856,7 @@
             renderFileTree();
             updateStats();
             updateExportSummary();
+            persistProjectState();
             
             hideImportModal();
             setStatus(`Imported ${imported} new files, updated ${updated} files, deleted ${removed} files`);
@@ -1787,10 +1884,29 @@
 
         function loadFileTree() {
             const path = document.getElementById('baseFolder').value;
-            basePath = path;
+            basePath = String(path || '').trim() || `./${getProjectRootName()}`;
+            localStorage.setItem('deepseed_base_path', basePath);
             
             renderFileTree();
+            persistProjectState();
             setStatus(`Loaded project from ${path}`);
+        }
+
+        function undoLastImport() {
+            if (importUndoStack.length === 0) {
+                setStatus('No import to undo', true);
+                return;
+            }
+            const snapshot = importUndoStack.pop();
+            applyProjectStateSnapshot(snapshot);
+            const baseInput = document.getElementById('baseFolder');
+            if (baseInput) baseInput.value = basePath;
+            renderFileTree();
+            updateStats();
+            updateExportSummary();
+            refreshCurrentFile();
+            persistProjectState();
+            setStatus('Undo successful');
         }
 
         function toggleSection(section) {
