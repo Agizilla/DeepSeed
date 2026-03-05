@@ -2,45 +2,48 @@
 
 ## Sprint Goal
 
-Increase reliability and contributor readiness without changing core architecture.
+Harden the core workflow (`ask -> parse -> review/apply -> export`) with better reliability, clearer failure handling, and test coverage.
 
 ## Sprint Length
 
-2 weeks
+1 week
 
 ## Work Breakdown (1-3 hour tasks)
 
-1. Add API error code mapping utility and UI messaging polish.
+1. Implement explicit API status mapping (`401`, `402`, `429`, `5xx`) in `askDeepseek`.
    - Estimate: 2h
-   - Testing: simulate `401/402/429/500` responses.
+   - Output: status-to-message helper + targeted UI auth/status text.
+   - Testing: mock response objects and verify messages by status.
 
-2. Add parser fixture tests for mixed and malformed blocks.
+2. Add parser regression fixtures for marker and diff edge cases.
    - Estimate: 3h
+   - Output: fixture files + table-driven tests for malformed/mixed inputs.
    - Testing: `node --test tests/deepseek-parser.test.js`.
 
-3. Add smoke test script for end-to-end parse/apply sanity.
+3. Add integration-like smoke test for `import -> parse -> apply`.
    - Estimate: 3h
-   - Testing: run smoke script in CI.
+   - Output: script that runs parser + apply helpers against sample input and validates resulting tree/sets.
+   - Testing: execute smoke script in CI.
 
-4. Add README troubleshooting section for API/auth/config issues.
+4. Add UI/manual QA checklist for theme and settings persistence.
    - Estimate: 1h
-   - Testing: manual doc review.
+   - Output: `tests/manual-ui-checklist.md`.
+   - Testing: manual pass across all themes and persistence controls.
 
-5. Add contribution templates and labels guidance.
+5. Add localStorage key migration from legacy `mute_*` keys to `deepseed_*`.
    - Estimate: 2h
-   - Testing: create sample issue/PR locally.
+   - Output: one-time migration on startup, backwards-compatible read path.
+   - Testing: simulate browser data with old keys and verify seamless load.
 
-6. Add UI a11y quick pass (labels, focus indicators, button names).
+6. Add conflict preview groundwork for import collisions.
    - Estimate: 3h
-   - Testing: keyboard-only walkthrough.
-
-7. Add theme regression checklist and manual QA notes.
-   - Estimate: 1h
-   - Testing: all themes verified against core panels.
+   - Output: detect risky applies (missing base/mismatch) and surface warnings in import list.
+   - Testing: crafted diff inputs where base content diverges.
 
 ## Exit Criteria
 
-- CI green on default branch.
-- Parser tests expanded and stable.
-- Common API failures are actionable from UI messages.
-- Public contribution docs are complete and coherent.
+- CI green with expanded parser and smoke coverage.
+- API failure messages are specific and actionable.
+- Theme/settings persistence checklist completed.
+- Legacy localStorage keys migrate without data loss.
+- Collision warnings appear before risky import apply actions.
